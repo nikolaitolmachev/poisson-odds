@@ -46,9 +46,7 @@ class Poisson:
             )
             self._moneyline: BookmakerMoneyline = self._calculate_moneyline_by_poisson()
         else:
-            raise ValueError(
-                'Incorrect quality value for one of teams at least!'
-            )
+            raise ValueError('Incorrect quality value for one of teams at least!')
 
     @property
     def probability_table_goal_draws(self) -> list[list[Probability]]:
@@ -115,9 +113,7 @@ class Poisson:
             for goals in goal_counts
         ]
         draws = [
-            self._calculate_draw_probability(
-                home_probability, away_probability,
-            )
+            self._calculate_draw_probability(home_probability, away_probability)
             for home_probability, away_probability in zip(home, away)
         ]
         return [home, away, draws]
@@ -154,15 +150,11 @@ class Poisson:
                 midpoint = total_goals // 2
                 even_total = total_goals % 2 == 0
                 # Keep the Probability seed: its first addition rounds.
-                score_probability: Probability | float = (
-                    draws[midpoint] if even_total else 0
-                )
+                score_probability: Probability | float = draws[midpoint] if even_total else 0
                 for home_goals in range(total_goals + 1):
                     if even_total and home_goals == midpoint:
                         continue
-                    score_probability += (
-                        home[home_goals] * away[total_goals - home_goals]
-                    )
+                    score_probability += home[home_goals] * away[total_goals - home_goals]
                 under += score_probability
 
             if total_goals < 2 and not under:
@@ -180,9 +172,7 @@ class Poisson:
                      / (1 / lower.odds_under + 1 / upper.odds_over)),
                 3,
             )
-            totals.append(BookmakerTotal(
-                line, Poisson.get_opposite_odds(1 / under_odds), under_odds,
-            ))
+            totals.append(BookmakerTotal(line, Poisson.get_opposite_odds(1 / under_odds), under_odds))
 
         totals = sorted(totals, key=lambda total: total.line)
         asian_totals = [
@@ -267,6 +257,7 @@ class Poisson:
         home_probabilities = self._probability_table_goal_draws[0]
         away_probabilities = self._probability_table_goal_draws[1]
 
+        # Calculate half-integer handicaps from -10.5 to -1.5.
         for margin in range(11, 1, -1):
             home_win_probability = 0.0
             for home_goals in range(margin, 12):
@@ -301,6 +292,7 @@ class Poisson:
             BookmakerHandicap(0.5, Poisson.get_opposite_odds(1 / self._moneyline.odds_away), self._moneyline.odds_away)
         )
 
+        # Calculate half-integer handicaps from +1.5 to +10.5.
         for margin in range(2, 12):
             away_win_probability = 0.0
             for home_goals in range(12 - margin):
@@ -316,267 +308,14 @@ class Poisson:
                     round(1 / away_win_probability, 3),
                 ))
 
-        # calculate -11, -7, -6 ... -1 lines
-        home_win_by_1 = 0.0
-        for i in range(1, 12):
-            home_win_by_1 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i - 1]
-        to_home = home_win_by_1
-        try:
-            home_odds = round((1 - home_win_by_1) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_1) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_1) / (1 - (1 / self._moneyline.odds_home)), 3)
-        list_of_handicaps.append(BookmakerHandicap(-1.0, home_odds, away_odds))
-
-        home_win_by_2 = 0.0
-        for i in range(2, 12):
-            home_win_by_2 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i - 2]
-        to_home += home_win_by_2
-        to_away = home_win_by_1
-        try:
-            home_odds = round((1 - home_win_by_2) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_2) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_2) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-2.0, home_odds, away_odds))
-
-        home_win_by_3 = 0.0
-        for i in range(3, 12):
-            home_win_by_3 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i - 3]
-        to_home += home_win_by_3
-        to_away += home_win_by_2
-        try:
-            home_odds = round((1 - home_win_by_3) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_3) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_3) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-3.0, home_odds, away_odds))
-
-        home_win_by_4 = 0.0
-        for i in range(4, 12):
-            home_win_by_4 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i - 4]
-        to_home += home_win_by_4
-        to_away += home_win_by_3
-        try:
-            home_odds = round((1 - home_win_by_4) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_4) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_4) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-4.0, home_odds, away_odds))
-
-        home_win_by_5 = 0.0
-        for i in range(5, 12):
-            home_win_by_5 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i - 5]
-        to_home += home_win_by_5
-        to_away += home_win_by_4
-        try:
-            home_odds = round((1 - home_win_by_5) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_5) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_5) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-5.0, home_odds, away_odds))
-
-        home_win_by_6 = 0.0
-        for i in range(6, 12):
-            home_win_by_6 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i - 6]
-        to_home += home_win_by_6
-        to_away += home_win_by_5
-        try:
-            home_odds = round((1 - home_win_by_6) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_6) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_6) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-6.0, home_odds, away_odds))
-
-        home_win_by_7 = 0.0
-        for i in range(7, 12):
-            home_win_by_7 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i - 7]
-        to_home += home_win_by_7
-        to_away += home_win_by_6
-        try:
-            home_odds = round(
-                (1 - home_win_by_7)
-                / ((1 / self._moneyline.odds_home) - to_home),
-                3,
-            )
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_7) / consts.AROUND_ZERO, 3)
-        away_odds = round((1 - home_win_by_7) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-7.0, home_odds, away_odds))
-
-        home_win_by_8 = 0.0
-        for i in range(8, 12):
-            home_win_by_8 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i - 8]
-        to_home += home_win_by_8
-        to_away += home_win_by_7
-        try:
-            home_odds = round((1 - home_win_by_8) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_8) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_8) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-8.0, home_odds, away_odds))
-
-        home_win_by_9 = self._probability_table_goal_draws[0][9] * self._probability_table_goal_draws[1][0] + \
-                            self._probability_table_goal_draws[0][10] * self._probability_table_goal_draws[1][1] + \
-                            self._probability_table_goal_draws[0][11] * self._probability_table_goal_draws[1][2]
-        to_home += home_win_by_9
-        to_away += home_win_by_8
-        try:
-            home_odds = round((1 - home_win_by_9) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_9) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_9) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-9.0, home_odds, away_odds))
-
-        home_win_by_10 = self._probability_table_goal_draws[0][10] * self._probability_table_goal_draws[1][0] + \
-                             self._probability_table_goal_draws[0][11] * self._probability_table_goal_draws[1][1]
-        to_home += home_win_by_10
-        to_away += home_win_by_9
-        try:
-            home_odds = round((1 - home_win_by_10) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_10) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_10) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-10.0, home_odds, away_odds))
-
-        home_win_by_11 = self._probability_table_goal_draws[0][11] * self._probability_table_goal_draws[1][0]
-        to_home += home_win_by_11
-        to_away += home_win_by_10
-        try:
-            home_odds = round((1 - home_win_by_11) / ((1 / self._moneyline.odds_home) - to_home), 3)
-        except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_11) / consts.AROUND_ZERO, 3)  # then closer to 0
-        away_odds = round((1 - home_win_by_11) / (1 - (1 / self._moneyline.odds_home) + to_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(-11.0, home_odds, away_odds))
-
-        # calculate +1, +2, +3 ... +11 lines
-        away_win_by_1 = 0.0
-        for i in range(11):
-            away_win_by_1 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i + 1]
-        to_away = away_win_by_1
-        try:
-            away_odds = round((1 - away_win_by_1) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_1) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_1) / (1 - (1 / self._moneyline.odds_away)), 3)
-        list_of_handicaps.append(BookmakerHandicap(1.0, home_odds, away_odds))
-
-        away_win_by_2 = 0.0
-        for i in range(10):
-            away_win_by_2 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i + 2]
-        to_away += away_win_by_2
-        to_home = away_win_by_1
-        try:
-            away_odds = round((1 - away_win_by_2) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_2) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_2) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(2.0, home_odds, away_odds))
-
-        away_win_by_3 = 0.0
-        for i in range(9):
-            away_win_by_3 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i + 3]
-        to_away += away_win_by_3
-        to_home += away_win_by_2
-        try:
-            away_odds = round((1 - away_win_by_3) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_3) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_3) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(3.0, home_odds, away_odds))
-
-        away_win_by_4 = 0.0
-        for i in range(8):
-            away_win_by_4 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i + 4]
-        to_away += away_win_by_4
-        to_home += away_win_by_3
-        try:
-            away_odds = round((1 - away_win_by_4) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_4) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_4) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(4.0, home_odds, away_odds))
-
-        away_win_by_5 = 0.0
-        for i in range(7):
-            away_win_by_5 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i + 5]
-        to_away += away_win_by_5
-        to_home += away_win_by_4
-        try:
-            away_odds = round((1 - away_win_by_5) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_5) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_5) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(5.0, home_odds, away_odds))
-
-        away_win_by_6 = 0.0
-        for i in range(6):
-            away_win_by_6 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i + 6]
-        to_away += away_win_by_6
-        to_home += away_win_by_5
-        try:
-            away_odds = round((1 - away_win_by_6) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_6) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_6) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(6.0, home_odds, away_odds))
-
-        away_win_by_7 = 0.0
-        for i in range(5):
-            away_win_by_7 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i + 7]
-        to_away += away_win_by_7
-        to_home += away_win_by_6
-        try:
-            away_odds = round((1 - away_win_by_7) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_7) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_7) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(7.0, home_odds, away_odds))
-
-        away_win_by_8 = 0.0
-        for i in range(4):
-            away_win_by_8 += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][i + 8]
-        to_away += away_win_by_8
-        to_home += away_win_by_7
-        try:
-            away_odds = round((1 - away_win_by_8) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_8) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_8) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(8.0, home_odds, away_odds))
-
-        away_win_by_9 = self._probability_table_goal_draws[0][0] * self._probability_table_goal_draws[1][9] + \
-                            self._probability_table_goal_draws[0][1] * self._probability_table_goal_draws[1][10] + \
-                            self._probability_table_goal_draws[0][2] * self._probability_table_goal_draws[1][11]
-        to_away += away_win_by_9
-        to_home += away_win_by_8
-        try:
-            away_odds = round((1 - away_win_by_9) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_9) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_9) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(9.0, home_odds, away_odds))
-
-        away_win_by_10 = self._probability_table_goal_draws[0][0] * self._probability_table_goal_draws[1][10] + \
-                             self._probability_table_goal_draws[0][1] * self._probability_table_goal_draws[1][11]
-        to_away += away_win_by_10
-        to_home += away_win_by_9
-        try:
-            away_odds = round((1 - away_win_by_10) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_10) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_10) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(10.0, home_odds, away_odds))
-
-        away_win_by_11 = self._probability_table_goal_draws[0][0] * self._probability_table_goal_draws[1][11]
-        to_away += away_win_by_11
-        to_home += away_win_by_10
-        try:
-            away_odds = round((1 - away_win_by_11) / ((1 / self._moneyline.odds_away) - to_away), 3)
-        except ZeroDivisionError:
-            away_odds = round((1 - away_win_by_11) / consts.AROUND_ZERO, 3)  # then closer to 0
-        home_odds = round((1 - away_win_by_11) / (1 - (1 / self._moneyline.odds_away) + to_home), 3)
-        list_of_handicaps.append(BookmakerHandicap(11.0, home_odds, away_odds))
+        # Calculate integer handicaps from -1.0 to -11.0.
+        list_of_handicaps.extend(self._calculate_integer_handicap_lines(
+            range(-1, -12, -1), self._moneyline.odds_home,
+        ))
+        # Calculate integer handicaps from +1.0 to +11.0.
+        list_of_handicaps.extend(self._calculate_integer_handicap_lines(
+            range(1, 12), self._moneyline.odds_away,
+        ))
 
         list_of_handicaps = sorted(list_of_handicaps, key=lambda bookmaker_handicap: bookmaker_handicap.line)
 
@@ -602,6 +341,58 @@ class Poisson:
             dict_handicaps[handicap.line] = handicap
 
         return dict_handicaps
+
+    def _calculate_integer_handicap_lines(
+        self, lines: range, moneyline_odds: float,
+    ) -> list[BookmakerHandicap]:
+        """Calculate integer handicaps for one side in margin order.
+
+        Args:
+            lines: Same-sign lines ordered by increasing absolute value.
+            moneyline_odds: Home win odds for negative lines, away win odds
+                for positive lines.
+
+        Returns:
+            Handicap objects in the supplied line order.
+
+        Raises:
+            ZeroDivisionError: If an unguarded denominator is zero.
+        """
+        home = self._probability_table_goal_draws[0]
+        away = self._probability_table_goal_draws[1]
+        handicaps: list[BookmakerHandicap] = []
+        to_winner = to_other = previous_probability = 0.0
+        for line in lines:
+            margin = abs(line)
+            probability = 0.0
+            for home_goals in range(max(0, -line), min(12, 12 - line)):
+                probability += home[home_goals] * away[home_goals + line]
+            if margin == 1:
+                to_winner = probability
+            else:
+                to_winner += probability
+                if margin == 2:
+                    to_other = previous_probability
+                else:
+                    to_other += previous_probability
+            try:
+                winner_odds = round(
+                    (1 - probability)
+                    / ((1 / moneyline_odds) - to_winner), 3,
+                )
+            except ZeroDivisionError:
+                winner_odds = round((1 - probability) / consts.AROUND_ZERO, 3)
+            if margin == 1:
+                other_odds = round((1 - probability) / (1 - (1 / moneyline_odds)), 3)
+            else:
+                other_odds = round((1 - probability) / (1 - (1 / moneyline_odds) + to_other), 3)
+            home_odds, away_odds = (
+                (winner_odds, other_odds) if line < 0
+                else (other_odds, winner_odds)
+            )
+            handicaps.append(BookmakerHandicap(float(line), home_odds, away_odds))
+            previous_probability = probability
+        return handicaps
 
     @staticmethod
     def _get_asian_handicap_line(handi_1: BookmakerHandicap, handi_2: BookmakerHandicap) -> BookmakerHandicap:
