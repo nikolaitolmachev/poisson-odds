@@ -1,3 +1,5 @@
+"""Test corrected high totals and the minus-seven handicap."""
+
 import unittest
 
 from poisson_odds.poisson import Poisson

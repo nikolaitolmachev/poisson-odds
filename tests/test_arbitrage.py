@@ -1,4 +1,7 @@
+"""Test the absence of arbitrage in moneyline, totals, and handicaps."""
+
 import unittest
+
 from poisson_odds.poisson import Poisson
 
 

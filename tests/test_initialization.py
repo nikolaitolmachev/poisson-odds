@@ -1,3 +1,5 @@
+"""Test Poisson initialization, input validation, and warnings."""
+
 import unittest
 
 from poisson_odds.poisson import Poisson
