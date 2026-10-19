@@ -18,6 +18,8 @@ class Poisson:
         _moneyline: Odds for a home win, draw, and away win.
     """
 
+    # ==================== 1. INITIALIZATION & PROPERTIES ====================
+
     def __init__(self, quality_team_a: float, quality_team_b: float) -> None:
         """Initialize the probability table and moneyline odds.
 
@@ -57,6 +59,8 @@ class Poisson:
     def moneyline(self) -> BookmakerMoneyline:
         """Return the calculated moneyline odds."""
         return self._moneyline
+
+    # ==================== 2. PROBABILITY CALCULATIONS ====================
 
     @staticmethod
     def _calculate_goal_probability(_lambda: float, k: int) -> Probability:
@@ -117,6 +121,212 @@ class Poisson:
             for home_probability, away_probability in zip(home, away)
         ]
         return [home, away, draws]
+
+    # ==================== 3. MONEYLINE ====================
+
+    def _calculate_moneyline_by_poisson(self) -> BookmakerMoneyline:
+        """Calculate moneyline odds from the probability table.
+
+        Returns:
+            BookmakerMoneyline containing home win, draw, and away win odds.
+        """
+
+        # calculate odds for home win
+        home_odds = consts.AROUND_ZERO
+        i, j = 1, 0
+        for _ in range(0, consts.MAX_SCORE_TO_COUNT - 1):
+            for _ in range(0, consts.MAX_SCORE_TO_COUNT):
+                if i != j:
+                    res = self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
+                    home_odds += res
+                    j += 1
+            i += 1
+            j = 0
+        home_odds = round(1/home_odds, 3)
+
+        # calculate odds for a draw
+        draw_odds = consts.AROUND_ZERO
+        for draw in self._probability_table_goal_draws[2]:
+            draw_odds += draw.probability
+        draw_odds = round(1/draw_odds, 3)
+
+        # calculate odds for away win
+        away_odds = consts.AROUND_ZERO
+        i, j = 0, 1
+        for _ in range(0, consts.MAX_SCORE_TO_COUNT - 1):
+            for _ in range(0, consts.MAX_SCORE_TO_COUNT):
+                if i != j:
+                    res = self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
+                    away_odds += res
+                    i += 1
+            j += 1
+            i = 0
+        away_odds = round(1 / away_odds, 3)
+
+        return BookmakerMoneyline(home_odds, draw_odds, away_odds)
+
+    # ==================== 4. HANDICAPS ====================
+
+    def calculate_handicap_odds_by_poisson(self) -> dict[float, BookmakerHandicap]:
+        """Calculate handicap odds from the probability table.
+
+        Returns:
+            BookmakerHandicap objects keyed by line in ascending order, after
+            filtering out lines with odds below the minimum threshold.
+
+        Raises:
+            ZeroDivisionError: If an unguarded denominator is zero.
+        """
+
+        list_of_handicaps: list[BookmakerHandicap] = []
+
+        home_probabilities = self._probability_table_goal_draws[0]
+        away_probabilities = self._probability_table_goal_draws[1]
+
+        # Calculate half-integer handicaps from -10.5 to -1.5.
+        for margin in range(11, 1, -1):
+            home_win_probability = 0.0
+            for home_goals in range(margin, 12):
+                for away_goals in range(home_goals - margin + 1):
+                    home_win_probability += (
+                        home_probabilities[home_goals]
+                        * away_probabilities[away_goals]
+                    )
+            if home_win_probability:
+                list_of_handicaps.append(BookmakerHandicap(
+                    0.5 - margin,
+                    round(1 / home_win_probability, 3),
+                    Poisson.get_opposite_odds(home_win_probability),
+                ))
+
+        # -0.5 = Moneyline home win
+        list_of_handicaps.append(
+            BookmakerHandicap(
+                -0.5,
+                self._moneyline.odds_home,
+                Poisson.get_opposite_odds(1 / self._moneyline.odds_home),
+            )
+        )
+
+        # +0
+        handicap_0_home_odds = round((1 - (1 / self._moneyline.odds_draw)) / (1 / self._moneyline.odds_home), 3)
+        handicap_0_away_odds = round((1 - (1 / self._moneyline.odds_draw)) / (1 / self._moneyline.odds_away), 3)
+        list_of_handicaps.append(BookmakerHandicap(0, handicap_0_home_odds, handicap_0_away_odds))
+
+        # +0.5 = Moneyline away win
+        list_of_handicaps.append(
+            BookmakerHandicap(0.5, Poisson.get_opposite_odds(1 / self._moneyline.odds_away), self._moneyline.odds_away)
+        )
+
+        # Calculate half-integer handicaps from +1.5 to +10.5.
+        for margin in range(2, 12):
+            away_win_probability = 0.0
+            for home_goals in range(12 - margin):
+                for away_goals in range(home_goals + margin, 12):
+                    away_win_probability += (
+                        home_probabilities[home_goals]
+                        * away_probabilities[away_goals]
+                    )
+            if away_win_probability:
+                list_of_handicaps.append(BookmakerHandicap(
+                    margin - 0.5,
+                    Poisson.get_opposite_odds(away_win_probability),
+                    round(1 / away_win_probability, 3),
+                ))
+
+        # Calculate integer handicaps from -1.0 to -11.0.
+        list_of_handicaps.extend(self._calculate_integer_handicap_lines(
+            range(-1, -12, -1), self._moneyline.odds_home,
+        ))
+        # Calculate integer handicaps from +1.0 to +11.0.
+        list_of_handicaps.extend(self._calculate_integer_handicap_lines(
+            range(1, 12), self._moneyline.odds_away,
+        ))
+
+        list_of_handicaps = sorted(list_of_handicaps, key=lambda handicap: handicap.line)
+
+        # Calculate Asian handicaps from adjacent sorted lines.
+        asian_lines: list[BookmakerHandicap] = [
+            self._get_asian_handicap_line(lower, upper)
+            for lower, upper in zip(list_of_handicaps, list_of_handicaps[1:])
+        ]
+        list_of_handicaps = sorted(
+            list_of_handicaps + asian_lines,
+            key=lambda handicap: handicap.line,
+        )
+
+        # remove low odds
+        list_of_handicaps = BookmakerHandicap.get_only_meaningful_lines(list_of_handicaps)
+        return {handicap.line: handicap for handicap in list_of_handicaps}
+
+    def _calculate_integer_handicap_lines(self, lines: range, moneyline_odds: float) -> list[BookmakerHandicap]:
+        """Calculate integer handicaps for one side in margin order.
+
+        Args:
+            lines: Same-sign lines ordered by increasing absolute value.
+            moneyline_odds: Home win odds for negative lines, away win odds
+                for positive lines.
+
+        Returns:
+            Handicap objects in the supplied line order.
+
+        Raises:
+            ZeroDivisionError: If an unguarded denominator is zero.
+        """
+        home = self._probability_table_goal_draws[0]
+        away = self._probability_table_goal_draws[1]
+        handicaps: list[BookmakerHandicap] = []
+        to_winner = to_other = previous_probability = 0.0
+        for line in lines:
+            margin = abs(line)
+            probability = 0.0
+            for home_goals in range(max(0, -line), min(12, 12 - line)):
+                probability += home[home_goals] * away[home_goals + line]
+            if margin == 1:
+                to_winner = probability
+            else:
+                to_winner += probability
+                if margin == 2:
+                    to_other = previous_probability
+                else:
+                    to_other += previous_probability
+            try:
+                winner_odds = round(
+                    (1 - probability)
+                    / ((1 / moneyline_odds) - to_winner), 3,
+                )
+            except ZeroDivisionError:
+                winner_odds = round((1 - probability) / consts.AROUND_ZERO, 3)
+            if margin == 1:
+                other_odds = round((1 - probability) / (1 - (1 / moneyline_odds)), 3)
+            else:
+                other_odds = round((1 - probability) / (1 - (1 / moneyline_odds) + to_other), 3)
+            home_odds, away_odds = (
+                (winner_odds, other_odds) if line < 0
+                else (other_odds, winner_odds)
+            )
+            handicaps.append(BookmakerHandicap(float(line), home_odds, away_odds))
+            previous_probability = probability
+        return handicaps
+
+    @staticmethod
+    def _get_asian_handicap_line(handi_1: BookmakerHandicap, handi_2: BookmakerHandicap) -> BookmakerHandicap:
+        """Calculate an Asian handicap by averaging adjacent lines and odds.
+
+        Args:
+            handi_1: First neighboring handicap.
+            handi_2: Second neighboring handicap.
+
+        Returns:
+            Handicap with its line rounded to two decimal places and odds to
+            three decimal places.
+        """
+        line = round((handi_1.line + handi_2.line) / 2, 2)
+        home = round((handi_1.odds_home + handi_2.odds_home) / 2, 3)
+        away = round((handi_1.odds_away + handi_2.odds_away) / 2, 3)
+        return BookmakerHandicap(line, home, away)
+
+    # ==================== 5. TOTALS ====================
 
     def calculate_total_odds_by_poisson(self) -> dict[float, BookmakerTotal]:
         """Calculate over/under odds from the probability table.
@@ -200,216 +410,7 @@ class Poisson:
         under = round((total_1.odds_under + total_2.odds_under) / 2, 3)
         return BookmakerTotal(line, over, under)
 
-    def _calculate_moneyline_by_poisson(self) -> BookmakerMoneyline:
-        """Calculate moneyline odds from the probability table.
-
-        Returns:
-            BookmakerMoneyline containing home win, draw, and away win odds.
-        """
-
-        # calculate odds for home win
-        home_odds = consts.AROUND_ZERO
-        i, j = 1, 0
-        for _ in range(0, consts.MAX_SCORE_TO_COUNT - 1):
-            for _ in range(0, consts.MAX_SCORE_TO_COUNT):
-                if i != j:
-                    res = self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-                    home_odds += res
-                    j += 1
-            i += 1
-            j = 0
-        home_odds = round(1/home_odds, 3)
-
-        # calculate odds for a draw
-        draw_odds = consts.AROUND_ZERO
-        for draw in self._probability_table_goal_draws[2]:
-            draw_odds += draw.probability
-        draw_odds = round(1/draw_odds, 3)
-
-        # calculate odds for away win
-        away_odds = consts.AROUND_ZERO
-        i, j = 0, 1
-        for _ in range(0, consts.MAX_SCORE_TO_COUNT - 1):
-            for _ in range(0, consts.MAX_SCORE_TO_COUNT):
-                if i != j:
-                    res = self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-                    away_odds += res
-                    i += 1
-            j += 1
-            i = 0
-        away_odds = round(1 / away_odds, 3)
-
-        return BookmakerMoneyline(home_odds, draw_odds, away_odds)
-
-    def calculate_handicap_odds_by_poisson(self) -> dict[float, BookmakerHandicap]:
-        """Calculate handicap odds from the probability table.
-
-        Returns:
-            BookmakerHandicap objects keyed by line in ascending order, after
-            filtering out lines with odds below the minimum threshold.
-
-        Raises:
-            ZeroDivisionError: If an unguarded denominator is zero.
-        """
-
-        list_of_handicaps: list[BookmakerHandicap] = []
-
-        home_probabilities = self._probability_table_goal_draws[0]
-        away_probabilities = self._probability_table_goal_draws[1]
-
-        # Calculate half-integer handicaps from -10.5 to -1.5.
-        for margin in range(11, 1, -1):
-            home_win_probability = 0.0
-            for home_goals in range(margin, 12):
-                for away_goals in range(home_goals - margin + 1):
-                    home_win_probability += (
-                        home_probabilities[home_goals]
-                        * away_probabilities[away_goals]
-                    )
-            if home_win_probability:
-                list_of_handicaps.append(BookmakerHandicap(
-                    0.5 - margin,
-                    round(1 / home_win_probability, 3),
-                    Poisson.get_opposite_odds(home_win_probability),
-                ))
-
-        # -0.5 = Moneyline home win
-        list_of_handicaps.append(
-            BookmakerHandicap(
-                -0.5,
-                self._moneyline.odds_home,
-                Poisson.get_opposite_odds(1 / self._moneyline.odds_home),
-            )
-        )
-
-        # +0
-        handicap_0_home_odds = round((1 - (1 / self._moneyline.odds_draw)) / (1 / self._moneyline.odds_home), 3)
-        handicap_0_away_odds = round((1 - (1 / self._moneyline.odds_draw)) / (1 / self._moneyline.odds_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(0, handicap_0_home_odds, handicap_0_away_odds))
-
-        # +0.5 = Moneyline away win
-        list_of_handicaps.append(
-            BookmakerHandicap(0.5, Poisson.get_opposite_odds(1 / self._moneyline.odds_away), self._moneyline.odds_away)
-        )
-
-        # Calculate half-integer handicaps from +1.5 to +10.5.
-        for margin in range(2, 12):
-            away_win_probability = 0.0
-            for home_goals in range(12 - margin):
-                for away_goals in range(home_goals + margin, 12):
-                    away_win_probability += (
-                        home_probabilities[home_goals]
-                        * away_probabilities[away_goals]
-                    )
-            if away_win_probability:
-                list_of_handicaps.append(BookmakerHandicap(
-                    margin - 0.5,
-                    Poisson.get_opposite_odds(away_win_probability),
-                    round(1 / away_win_probability, 3),
-                ))
-
-        # Calculate integer handicaps from -1.0 to -11.0.
-        list_of_handicaps.extend(self._calculate_integer_handicap_lines(
-            range(-1, -12, -1), self._moneyline.odds_home,
-        ))
-        # Calculate integer handicaps from +1.0 to +11.0.
-        list_of_handicaps.extend(self._calculate_integer_handicap_lines(
-            range(1, 12), self._moneyline.odds_away,
-        ))
-
-        list_of_handicaps = sorted(list_of_handicaps, key=lambda bookmaker_handicap: bookmaker_handicap.line)
-
-        # calculate 0.75, 1.25, 1.75, 2.25 ... lines
-        i = 1
-        asian_lines = []
-        for bt in list_of_handicaps:
-            try:
-                asian_handicap_line = self._get_asian_handicap_line(bt, list_of_handicaps[i])
-                asian_lines.append(asian_handicap_line)
-                i += 1
-            except IndexError:
-                break
-        list_of_handicaps = sorted(list_of_handicaps + asian_lines,
-                                   key=lambda bookmaker_handicap: bookmaker_handicap.line)
-
-        # remove low odds
-        list_of_handicaps = BookmakerHandicap.get_only_meaningful_lines(list_of_handicaps)
-
-        # create dict
-        dict_handicaps = {}
-        for handicap in list_of_handicaps:
-            dict_handicaps[handicap.line] = handicap
-
-        return dict_handicaps
-
-    def _calculate_integer_handicap_lines(
-        self, lines: range, moneyline_odds: float,
-    ) -> list[BookmakerHandicap]:
-        """Calculate integer handicaps for one side in margin order.
-
-        Args:
-            lines: Same-sign lines ordered by increasing absolute value.
-            moneyline_odds: Home win odds for negative lines, away win odds
-                for positive lines.
-
-        Returns:
-            Handicap objects in the supplied line order.
-
-        Raises:
-            ZeroDivisionError: If an unguarded denominator is zero.
-        """
-        home = self._probability_table_goal_draws[0]
-        away = self._probability_table_goal_draws[1]
-        handicaps: list[BookmakerHandicap] = []
-        to_winner = to_other = previous_probability = 0.0
-        for line in lines:
-            margin = abs(line)
-            probability = 0.0
-            for home_goals in range(max(0, -line), min(12, 12 - line)):
-                probability += home[home_goals] * away[home_goals + line]
-            if margin == 1:
-                to_winner = probability
-            else:
-                to_winner += probability
-                if margin == 2:
-                    to_other = previous_probability
-                else:
-                    to_other += previous_probability
-            try:
-                winner_odds = round(
-                    (1 - probability)
-                    / ((1 / moneyline_odds) - to_winner), 3,
-                )
-            except ZeroDivisionError:
-                winner_odds = round((1 - probability) / consts.AROUND_ZERO, 3)
-            if margin == 1:
-                other_odds = round((1 - probability) / (1 - (1 / moneyline_odds)), 3)
-            else:
-                other_odds = round((1 - probability) / (1 - (1 / moneyline_odds) + to_other), 3)
-            home_odds, away_odds = (
-                (winner_odds, other_odds) if line < 0
-                else (other_odds, winner_odds)
-            )
-            handicaps.append(BookmakerHandicap(float(line), home_odds, away_odds))
-            previous_probability = probability
-        return handicaps
-
-    @staticmethod
-    def _get_asian_handicap_line(handi_1: BookmakerHandicap, handi_2: BookmakerHandicap) -> BookmakerHandicap:
-        """Calculate an Asian handicap by averaging adjacent lines and odds.
-
-        Args:
-            handi_1: First neighboring handicap.
-            handi_2: Second neighboring handicap.
-
-        Returns:
-            Handicap with its line rounded to two decimal places and odds to
-            three decimal places.
-        """
-        line = round((handi_1.line + handi_2.line) / 2, 2)
-        home = round((handi_1.odds_home + handi_2.odds_home) / 2, 3)
-        away = round((handi_1.odds_away + handi_2.odds_away) / 2, 3)
-        return BookmakerHandicap(line, home, away)
+    # ==================== 6. UTILITIES ====================
 
     @staticmethod
     def get_opposite_odds(odds: float) -> float:
