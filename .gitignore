@@ -1,9 +1,57 @@
-# created by virtualenv automatically
-Lib/
-Scripts/
-pyvenv.cfg
-dist/
-poisson_odds.egg-info/
-.idea/
-build/
+# Python bytecode and caches
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env/
+.venv-*/
+ENV/
+/Lib/
+/Scripts/
+/pyvenv.cfg
+
+# Build and distribution artifacts
+/build/
+/dist/
+*.egg-info/
+*.egg
+.eggs/
+pip-wheel-metadata/
+
+# Test, coverage, and analysis artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+.ruff_cache/
+.mypy_cache/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+/.aws/
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating system metadata
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log

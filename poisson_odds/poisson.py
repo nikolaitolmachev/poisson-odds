@@ -159,7 +159,7 @@ class Poisson:
         temp = self.__probability_table_goal_draws[2][4]
         j = 8
         for i in range(0, 9):
-            if i in (3, 4, 5):
+            if i == 4:
                 j -= 1
                 continue
             temp += self.__probability_table_goal_draws[0][i] * self.__probability_table_goal_draws[1][j]
@@ -178,7 +178,7 @@ class Poisson:
         temp = self.__probability_table_goal_draws[2][5]
         j = 10
         for i in range(0, 11):
-            if i in (4, 5, 6):
+            if i == 5:
                 j -= 1
                 continue
             temp += self.__probability_table_goal_draws[0][i] * self.__probability_table_goal_draws[1][j]
@@ -676,9 +676,13 @@ class Poisson:
         to_home += home_win_by_7
         to_away += home_win_by_6
         try:
-            home_odds = round((1 - home_win_by_7) / consts.AROUND_ZERO, 3) # then closer to 0
+            home_odds = round(
+                (1 - home_win_by_7)
+                / ((1 / self.__moneyline.odds_home) - to_home),
+                3,
+            )
         except ZeroDivisionError:
-            home_odds = round((1 - home_win_by_7) / ((1 / self.__moneyline.odds_home) - to_home), 3)
+            home_odds = round((1 - home_win_by_7) / consts.AROUND_ZERO, 3)
         away_odds = round((1 - home_win_by_7) / (1 - (1 / self.__moneyline.odds_home) + to_away), 3)
         list_of_handicaps.append(BookmakerHandicap(-7.0, home_odds, away_odds))
 
