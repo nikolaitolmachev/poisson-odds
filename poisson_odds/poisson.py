@@ -1,5 +1,6 @@
 import math
 import warnings
+
 from tabulate import tabulate
 
 from poisson_odds.probability import Probability
@@ -39,16 +40,21 @@ class Poisson:
         ):
             if quality_team_a + quality_team_b >= 10:
                 warnings.warn(
-                    "Values aren't real so it can't guarantee to work correctly.",
+                    "Values aren't real so it can't guarantee to work "
+                    "correctly.",
                     UserWarning,
                     2,
                 )
             self._probability_table_goal_draws: list[list[Probability]] = (
                 self._create_probability_table(quality_team_a, quality_team_b)
             )
-            self._moneyline: BookmakerMoneyline = self._calculate_moneyline_by_poisson()
+            self._moneyline: BookmakerMoneyline = (
+                self._calculate_moneyline_by_poisson()
+            )
         else:
-            raise ValueError('Incorrect quality value for one of teams at least!')
+            raise ValueError(
+                "Incorrect quality value for one of teams at least!"
+            )
 
     @property
     def probability_table_goal_draws(self) -> list[list[Probability]]:
@@ -73,7 +79,9 @@ class Poisson:
         Returns:
             Poisson probability rounded to three decimal places.
         """
-        probability_k = (_lambda ** k * math.exp(-_lambda)) / (math.factorial(k))
+        probability_k = (
+            (_lambda ** k * math.exp(-_lambda)) / (math.factorial(k))
+        )
 
         return Probability(round(probability_k, 3))
 
@@ -117,7 +125,9 @@ class Poisson:
             for goals in goal_counts
         ]
         draws = [
-            self._calculate_draw_probability(home_probability, away_probability)
+            self._calculate_draw_probability(
+                home_probability, away_probability,
+            )
             for home_probability, away_probability in zip(home, away)
         ]
         return [home, away, draws]
@@ -127,47 +137,35 @@ class Poisson:
     def _calculate_moneyline_by_poisson(self) -> BookmakerMoneyline:
         """Calculate moneyline odds from the probability table.
 
+        Probability accumulators start with AROUND_ZERO to avoid division
+        by zero when an outcome has no probability in the truncated table.
+
         Returns:
             BookmakerMoneyline containing home win, draw, and away win odds.
         """
+        home, away, draws = self._probability_table_goal_draws
+        home_probability = away_probability = consts.AROUND_ZERO
+        for winning_goals in range(1, consts.MAX_SCORE_TO_COUNT):
+            for losing_goals in range(winning_goals):
+                home_probability += home[winning_goals] * away[losing_goals]
+                away_probability += home[losing_goals] * away[winning_goals]
 
-        # calculate odds for home win
-        home_odds = consts.AROUND_ZERO
-        i, j = 1, 0
-        for _ in range(0, consts.MAX_SCORE_TO_COUNT - 1):
-            for _ in range(0, consts.MAX_SCORE_TO_COUNT):
-                if i != j:
-                    res = self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-                    home_odds += res
-                    j += 1
-            i += 1
-            j = 0
-        home_odds = round(1/home_odds, 3)
-
-        # calculate odds for a draw
         draw_odds = consts.AROUND_ZERO
-        for draw in self._probability_table_goal_draws[2]:
+        for draw in draws:
             draw_odds += draw.probability
-        draw_odds = round(1/draw_odds, 3)
+        draw_odds = round(1 / draw_odds, 3)
 
-        # calculate odds for away win
-        away_odds = consts.AROUND_ZERO
-        i, j = 0, 1
-        for _ in range(0, consts.MAX_SCORE_TO_COUNT - 1):
-            for _ in range(0, consts.MAX_SCORE_TO_COUNT):
-                if i != j:
-                    res = self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-                    away_odds += res
-                    i += 1
-            j += 1
-            i = 0
-        away_odds = round(1 / away_odds, 3)
-
-        return BookmakerMoneyline(home_odds, draw_odds, away_odds)
+        return BookmakerMoneyline(
+            round(1 / home_probability, 3),
+            draw_odds,
+            round(1 / away_probability, 3),
+        )
 
     # ==================== 4. HANDICAPS ====================
 
-    def calculate_handicap_odds_by_poisson(self) -> dict[float, BookmakerHandicap]:
+    def calculate_handicap_odds_by_poisson(
+        self,
+    ) -> dict[float, BookmakerHandicap]:
         """Calculate handicap odds from the probability table.
 
         Returns:
@@ -184,9 +182,9 @@ class Poisson:
         away_probabilities = self._probability_table_goal_draws[1]
 
         # Calculate half-integer handicaps from -10.5 to -1.5.
-        for margin in range(11, 1, -1):
+        for margin in range(consts.MAX_SCORE_TO_COUNT - 1, 1, -1):
             home_win_probability = 0.0
-            for home_goals in range(margin, 12):
+            for home_goals in range(margin, consts.MAX_SCORE_TO_COUNT):
                 for away_goals in range(home_goals - margin + 1):
                     home_win_probability += (
                         home_probabilities[home_goals]
@@ -209,20 +207,34 @@ class Poisson:
         )
 
         # +0
-        handicap_0_home_odds = round((1 - (1 / self._moneyline.odds_draw)) / (1 / self._moneyline.odds_home), 3)
-        handicap_0_away_odds = round((1 - (1 / self._moneyline.odds_draw)) / (1 / self._moneyline.odds_away), 3)
-        list_of_handicaps.append(BookmakerHandicap(0, handicap_0_home_odds, handicap_0_away_odds))
+        handicap_0_home_odds = round(
+            (1 - (1 / self._moneyline.odds_draw))
+            / (1 / self._moneyline.odds_home), 3,
+        )
+        handicap_0_away_odds = round(
+            (1 - (1 / self._moneyline.odds_draw))
+            / (1 / self._moneyline.odds_away), 3,
+        )
+        list_of_handicaps.append(BookmakerHandicap(
+            0, handicap_0_home_odds, handicap_0_away_odds,
+        ))
 
         # +0.5 = Moneyline away win
         list_of_handicaps.append(
-            BookmakerHandicap(0.5, Poisson.get_opposite_odds(1 / self._moneyline.odds_away), self._moneyline.odds_away)
+            BookmakerHandicap(
+                0.5,
+                Poisson.get_opposite_odds(1 / self._moneyline.odds_away),
+                self._moneyline.odds_away,
+            )
         )
 
         # Calculate half-integer handicaps from +1.5 to +10.5.
-        for margin in range(2, 12):
+        for margin in range(2, consts.MAX_SCORE_TO_COUNT):
             away_win_probability = 0.0
-            for home_goals in range(12 - margin):
-                for away_goals in range(home_goals + margin, 12):
+            for home_goals in range(consts.MAX_SCORE_TO_COUNT - margin):
+                for away_goals in range(
+                    home_goals + margin, consts.MAX_SCORE_TO_COUNT,
+                ):
                     away_win_probability += (
                         home_probabilities[home_goals]
                         * away_probabilities[away_goals]
@@ -236,14 +248,17 @@ class Poisson:
 
         # Calculate integer handicaps from -1.0 to -11.0.
         list_of_handicaps.extend(self._calculate_integer_handicap_lines(
-            range(-1, -12, -1), self._moneyline.odds_home,
+            range(-1, -consts.MAX_SCORE_TO_COUNT, -1),
+            self._moneyline.odds_home,
         ))
         # Calculate integer handicaps from +1.0 to +11.0.
         list_of_handicaps.extend(self._calculate_integer_handicap_lines(
-            range(1, 12), self._moneyline.odds_away,
+            range(1, consts.MAX_SCORE_TO_COUNT), self._moneyline.odds_away,
         ))
 
-        list_of_handicaps = sorted(list_of_handicaps, key=lambda handicap: handicap.line)
+        list_of_handicaps = sorted(
+            list_of_handicaps, key=lambda handicap: handicap.line,
+        )
 
         # Calculate Asian handicaps from adjacent sorted lines.
         asian_lines: list[BookmakerHandicap] = [
@@ -256,14 +271,19 @@ class Poisson:
         )
 
         # remove low odds
-        list_of_handicaps = BookmakerHandicap.get_only_meaningful_lines(list_of_handicaps)
+        list_of_handicaps = BookmakerHandicap.get_only_meaningful_lines(
+            list_of_handicaps,
+        )
         return {handicap.line: handicap for handicap in list_of_handicaps}
 
-    def _calculate_integer_handicap_lines(self, lines: range, moneyline_odds: float) -> list[BookmakerHandicap]:
+    def _calculate_integer_handicap_lines(
+        self, lines: range, moneyline_odds: float,
+    ) -> list[BookmakerHandicap]:
         """Calculate integer handicaps for one side in margin order.
 
         Args:
-            lines: Same-sign lines ordered by increasing absolute value.
+            lines: Consecutive same-sign lines starting at -1 or +1, with
+                absolute values increasing by one without gaps.
             moneyline_odds: Home win odds for negative lines, away win odds
                 for positive lines.
 
@@ -280,7 +300,13 @@ class Poisson:
         for line in lines:
             margin = abs(line)
             probability = 0.0
-            for home_goals in range(max(0, -line), min(12, 12 - line)):
+            for home_goals in range(
+                max(0, -line),
+                min(
+                    consts.MAX_SCORE_TO_COUNT,
+                    consts.MAX_SCORE_TO_COUNT - line,
+                ),
+            ):
                 probability += home[home_goals] * away[home_goals + line]
             if margin == 1:
                 to_winner = probability
@@ -298,19 +324,28 @@ class Poisson:
             except ZeroDivisionError:
                 winner_odds = round((1 - probability) / consts.AROUND_ZERO, 3)
             if margin == 1:
-                other_odds = round((1 - probability) / (1 - (1 / moneyline_odds)), 3)
+                other_odds = round(
+                    (1 - probability) / (1 - (1 / moneyline_odds)), 3,
+                )
             else:
-                other_odds = round((1 - probability) / (1 - (1 / moneyline_odds) + to_other), 3)
+                other_odds = round(
+                    (1 - probability)
+                    / (1 - (1 / moneyline_odds) + to_other), 3,
+                )
             home_odds, away_odds = (
                 (winner_odds, other_odds) if line < 0
                 else (other_odds, winner_odds)
             )
-            handicaps.append(BookmakerHandicap(float(line), home_odds, away_odds))
+            handicaps.append(BookmakerHandicap(
+                float(line), home_odds, away_odds,
+            ))
             previous_probability = probability
         return handicaps
 
     @staticmethod
-    def _get_asian_handicap_line(handi_1: BookmakerHandicap, handi_2: BookmakerHandicap) -> BookmakerHandicap:
+    def _get_asian_handicap_line(
+        handi_1: BookmakerHandicap, handi_2: BookmakerHandicap,
+    ) -> BookmakerHandicap:
         """Calculate an Asian handicap by averaging adjacent lines and odds.
 
         Args:
@@ -342,7 +377,7 @@ class Poisson:
         totals: list[BookmakerTotal] = []
         under = 0.0
 
-        for total_goals in range(12):
+        for total_goals in range(consts.MAX_SCORE_TO_COUNT):
             # Early lines have distinct addition and rounding sequences.
             if total_goals == 0:
                 under = draws[0].probability
@@ -360,11 +395,15 @@ class Poisson:
                 midpoint = total_goals // 2
                 even_total = total_goals % 2 == 0
                 # Keep the Probability seed: its first addition rounds.
-                score_probability: Probability | float = draws[midpoint] if even_total else 0
+                score_probability: Probability | float = (
+                    draws[midpoint] if even_total else 0
+                )
                 for home_goals in range(total_goals + 1):
                     if even_total and home_goals == midpoint:
                         continue
-                    score_probability += home[home_goals] * away[total_goals - home_goals]
+                    score_probability += (
+                        home[home_goals] * away[total_goals - home_goals]
+                    )
                 under += score_probability
 
             if total_goals < 2 and not under:
@@ -382,7 +421,9 @@ class Poisson:
                      / (1 / lower.odds_under + 1 / upper.odds_over)),
                 3,
             )
-            totals.append(BookmakerTotal(line, Poisson.get_opposite_odds(1 / under_odds), under_odds))
+            totals.append(BookmakerTotal(
+                line, Poisson.get_opposite_odds(1 / under_odds), under_odds,
+            ))
 
         totals = sorted(totals, key=lambda total: total.line)
         asian_totals = [
@@ -394,7 +435,9 @@ class Poisson:
         return {total.line: total for total in totals}
 
     @staticmethod
-    def _get_asian_total_line(total_1: BookmakerTotal, total_2: BookmakerTotal) -> BookmakerTotal:
+    def _get_asian_total_line(
+        total_1: BookmakerTotal, total_2: BookmakerTotal,
+    ) -> BookmakerTotal:
         """Calculate an Asian total by averaging adjacent lines and odds.
 
         Args:
@@ -432,9 +475,9 @@ class Poisson:
     def print_probability_table_goal_draws(self) -> None:
         """Print home, away, and matching-score probabilities as a grid."""
         table: list[list[str | Probability]] = [
-            [' ', *(str(goal) for goal in range(0, 12))],
-            ['Home to score', *self.probability_table_goal_draws[0]],
-            ['Away to score', *self.probability_table_goal_draws[1]],
-            ['Draw cor. score', *self.probability_table_goal_draws[2]],
+            [" ", *(str(goal) for goal in range(consts.MAX_SCORE_TO_COUNT))],
+            ["Home to score", *self.probability_table_goal_draws[0]],
+            ["Away to score", *self.probability_table_goal_draws[1]],
+            ["Draw cor. score", *self.probability_table_goal_draws[2]],
         ]
-        print(tabulate(table, headers='firstrow', tablefmt='grid'))
+        print(tabulate(table, headers="firstrow", tablefmt="grid"))
