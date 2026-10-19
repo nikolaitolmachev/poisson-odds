@@ -99,7 +99,7 @@ Display the Poisson probability distribution for both teams, including the proba
 model.print_probability_table_goal_draws()
 ```
 
-![Poisson Probability Table](assets/prob_table.jpg)
+![Poisson Probability Table](https://raw.githubusercontent.com/nikolaitolmachev/poisson-odds/master/assets/prob_table.jpg)
 
 ---
 
