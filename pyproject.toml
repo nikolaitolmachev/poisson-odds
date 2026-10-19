@@ -1,33 +1,46 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "poisson_odds"
+name = "poisson-odds"
 version = "0.1.2"
 authors = [
     {name = "Nikolai Tolmachev", email = "nikolai.tolmachev@gmail.com"}
 ]
-description = "A Python library designed for developers and analysts to calculate betting odds with ease using the power of Poisson distribution based on team qualities."
+description = "Poisson Odds — a Python library for calculating sports betting probabilities and fair odds using the Poisson distribution based on team qualities."
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = [
+    "poisson",
+    "probability",
+    "statistics",
+    "sports betting",
+    "fair odds",
+    "football",
+    "hockey",
+    "betting markets",
+]
 classifiers = [
-    'Development Status :: 5 - Production/Stable',
-    'Intended Audience :: Developers',
-    'Intended Audience :: Science/Research',
-    'Topic :: Software Development :: Libraries',
-    'License :: OSI Approved :: MIT License',
-    'Programming Language :: Python :: 3',
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
     "tabulate",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/nikolaitolmachev/poisson_odds"
+Homepage = "https://github.com/nikolaitolmachev/poisson-odds"
+Repository = "https://github.com/nikolaitolmachev/poisson-odds"
+Issues = "https://github.com/nikolaitolmachev/poisson-odds/issues"
 
 [tool.setuptools]
 packages = ["poisson_odds"]
-
-[tool.setuptools.package-data]
-"poisson_odds" = ["*"]
