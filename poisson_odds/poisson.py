@@ -122,7 +122,7 @@ class Poisson:
         ]
         return [home, away, draws]
 
-    def calculate_total_odds_by_poisson(self) -> dict:
+    def calculate_total_odds_by_poisson(self) -> dict[float, BookmakerTotal]:
         """Calculate over/under odds from the probability table.
 
         Returns:
@@ -132,178 +132,66 @@ class Poisson:
         Raises:
             ZeroDivisionError: If an unguarded denominator is zero.
         """
+        home, away, draws = self._probability_table_goal_draws
+        totals: list[BookmakerTotal] = []
+        under = 0.0
 
-        list_of_totals = []
+        for total_goals in range(12):
+            # Early lines have distinct addition and rounding sequences.
+            if total_goals == 0:
+                under = draws[0].probability
+            elif total_goals == 1:
+                under = draws[0] + home[1] * away[0] + home[0] * away[1]
+            elif total_goals == 2:
+                under += draws[1] + home[2] * away[0] + home[0] * away[2]
+            elif total_goals == 3:
+                under += round(
+                    home[2] * away[1] + home[1] * away[2]
+                    + home[3] * away[0] + home[0] * away[3],
+                    4,
+                )
+            else:
+                midpoint = total_goals // 2
+                even_total = total_goals % 2 == 0
+                # Keep the Probability seed: its first addition rounds.
+                score_probability: Probability | float = (
+                    draws[midpoint] if even_total else 0
+                )
+                for home_goals in range(total_goals + 1):
+                    if even_total and home_goals == midpoint:
+                        continue
+                    score_probability += (
+                        home[home_goals] * away[total_goals - home_goals]
+                    )
+                under += score_probability
 
-        # calculate 0.5, 1.5, 2.5 ... 8.5 lines
+            if total_goals < 2 and not under:
+                under = consts.AROUND_ZERO
+            totals.append(BookmakerTotal(
+                total_goals + 0.5,
+                Poisson.get_opposite_odds(under),
+                round(1 / under, 3),
+            ))
 
-        under = self._probability_table_goal_draws[2][0].probability
-        if not under:
-            under = consts.AROUND_ZERO
-        list_of_totals.append(BookmakerTotal(0.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
+        for line in range(1, len(totals)):
+            lower, upper = totals[line - 1], totals[line]
+            under_odds = round(
+                1 / ((1 / lower.odds_under)
+                     / (1 / lower.odds_under + 1 / upper.odds_over)),
+                3,
+            )
+            totals.append(BookmakerTotal(
+                line, Poisson.get_opposite_odds(1 / under_odds), under_odds,
+            ))
 
-        under = self._probability_table_goal_draws[2][0] + self._probability_table_goal_draws[0][1] * \
-                self._probability_table_goal_draws[1][0] + self._probability_table_goal_draws[0][0] * \
-                self._probability_table_goal_draws[1][1]
-        if not under:
-            under = consts.AROUND_ZERO
-        list_of_totals.append(BookmakerTotal(1.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        under += self._probability_table_goal_draws[2][1] + self._probability_table_goal_draws[0][2] * \
-                 self._probability_table_goal_draws[1][0] + self._probability_table_goal_draws[0][0] * \
-                 self._probability_table_goal_draws[1][2]
-        list_of_totals.append(BookmakerTotal(2.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        under += round(self._probability_table_goal_draws[0][2] * self._probability_table_goal_draws[1][1] +
-                       self._probability_table_goal_draws[0][1] * self._probability_table_goal_draws[1][2] +
-                       self._probability_table_goal_draws[0][3] * self._probability_table_goal_draws[1][0] +
-                       self._probability_table_goal_draws[0][0] * self._probability_table_goal_draws[1][3], 4)
-        list_of_totals.append(BookmakerTotal(3.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        temp = self._probability_table_goal_draws[2][2]
-        j = 4
-        for i in range(0, 5):
-            if i == 2:
-                j -= 1
-                continue
-            temp += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-            j -= 1
-        under += temp
-        list_of_totals.append(BookmakerTotal(4.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        temp = 0
-        j = 5
-        for i in range(0, 6):
-            temp += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-            j -= 1
-        under += temp
-        list_of_totals.append(BookmakerTotal(5.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        temp = self._probability_table_goal_draws[2][3]
-        j = 6
-        for i in range(0, 7):
-            if i == 3:
-                j -= 1
-                continue
-            temp += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-            j -= 1
-        under += temp
-        list_of_totals.append(BookmakerTotal(6.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        temp = 0
-        j = 7
-        for i in range(0, 8):
-            temp += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-            j -= 1
-        under += temp
-        list_of_totals.append(BookmakerTotal(7.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        temp = self._probability_table_goal_draws[2][4]
-        j = 8
-        for i in range(0, 9):
-            if i == 4:
-                j -= 1
-                continue
-            temp += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-            j -= 1
-        under += temp
-        list_of_totals.append(BookmakerTotal(8.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        temp = 0
-        j = 9
-        for i in range(0, 10):
-            temp += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-            j -= 1
-        under += temp
-        list_of_totals.append(BookmakerTotal(9.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        temp = self._probability_table_goal_draws[2][5]
-        j = 10
-        for i in range(0, 11):
-            if i == 5:
-                j -= 1
-                continue
-            temp += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-            j -= 1
-        under += temp
-        list_of_totals.append(BookmakerTotal(10.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        temp = 0
-        j = 11
-        for i in range(0, 12):
-            temp += self._probability_table_goal_draws[0][i] * self._probability_table_goal_draws[1][j]
-            j -= 1
-        under += temp
-        list_of_totals.append(BookmakerTotal(11.5, Poisson.get_opposite_odds(under), round(1 / under, 3)))
-
-        # calculate 1.0, 2.0, 3.00 ... 11.00 lines
-        under1 = round(1 / ((1 / list_of_totals[0].odds_under) / (1 / list_of_totals[0].odds_under +
-                                                                  1 / list_of_totals[1].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(1, Poisson.get_opposite_odds(1 / under1), under1))
-
-        under2 = round(1 / ((1/list_of_totals[1].odds_under) / (1/list_of_totals[1].odds_under +
-                                                                1/list_of_totals[2].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(2, Poisson.get_opposite_odds(1 / under2), under2))
-
-        under3 = round(1 / ((1/list_of_totals[2].odds_under) / (1/list_of_totals[2].odds_under +
-                                                                1/list_of_totals[3].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(3, Poisson.get_opposite_odds(1 / under3), under3))
-
-        under4 = round(1 / ((1 / list_of_totals[3].odds_under) / (1 / list_of_totals[3].odds_under +
-                                                                  1 / list_of_totals[4].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(4, Poisson.get_opposite_odds(1 / under4), under4))
-
-        under5 = round(1 / ((1 / list_of_totals[4].odds_under) / (1 / list_of_totals[4].odds_under +
-                                                                  1 / list_of_totals[5].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(5, Poisson.get_opposite_odds(1 / under5), under5))
-
-        under6 = round(1 / ((1 / list_of_totals[5].odds_under) / (1 / list_of_totals[5].odds_under +
-                                                                  1 / list_of_totals[6].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(6, Poisson.get_opposite_odds(1 / under6), under6))
-
-        under7 = round(1 / ((1 / list_of_totals[6].odds_under) / (1 / list_of_totals[6].odds_under +
-                                                                  1 / list_of_totals[7].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(7, Poisson.get_opposite_odds(1 / under7), under7))
-
-        under8 = round(1 / ((1 / list_of_totals[7].odds_under) / (1 / list_of_totals[7].odds_under +
-                                                                  1 / list_of_totals[8].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(8, Poisson.get_opposite_odds(1 / under8), under8))
-
-        under9 = round(1 / ((1 / list_of_totals[8].odds_under) / (1 / list_of_totals[8].odds_under +
-                                                                  1 / list_of_totals[9].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(9, Poisson.get_opposite_odds(1 / under9), under9))
-
-        under10 = round(1 / ((1 / list_of_totals[9].odds_under) / (1 / list_of_totals[9].odds_under +
-                                                                   1 / list_of_totals[10].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(10, Poisson.get_opposite_odds(1 / under10), under10))
-
-        under11 = round(1 / ((1 / list_of_totals[10].odds_under) / (1 / list_of_totals[10].odds_under +
-                                                                    1 / list_of_totals[11].odds_over)), 3)
-        list_of_totals.append(BookmakerTotal(11, Poisson.get_opposite_odds(1 / under11), under11))
-
-        list_of_totals = sorted(list_of_totals, key=lambda bookmaker_total: bookmaker_total.line)
-
-        # calculate 0.75, 1.25, 1.75, 2.25 ... 11.25 lines
-        i = 1
-        asian_lines = []
-        for bt in list_of_totals:
-            try:
-                asian_total_line = self._get_asian_total_line(bt, list_of_totals[i])
-                asian_lines.append(asian_total_line)
-                i += 1
-            except IndexError:
-                break
-        list_of_totals = sorted(list_of_totals + asian_lines, key=lambda bookmaker_total: bookmaker_total.line)
-
-        # remove low odds
-        list_of_totals = BookmakerTotal.get_only_meaningful_lines(list_of_totals)
-
-        # create dict
-        dict_totals = {}
-        for total in list_of_totals:
-            dict_totals[total.line] = total
-
-        return dict_totals
+        totals = sorted(totals, key=lambda total: total.line)
+        asian_totals = [
+            self._get_asian_total_line(lower, upper)
+            for lower, upper in zip(totals, totals[1:])
+        ]
+        totals = sorted(totals + asian_totals, key=lambda total: total.line)
+        totals = BookmakerTotal.get_only_meaningful_lines(totals)
+        return {total.line: total for total in totals}
 
     @staticmethod
     def _get_asian_total_line(total_1: BookmakerTotal, total_2: BookmakerTotal) -> BookmakerTotal:
