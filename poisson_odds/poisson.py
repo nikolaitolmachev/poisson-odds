@@ -24,20 +24,30 @@ class Poisson:
     def __init__(self, quality_team_a: float, quality_team_b: float) -> None:
         """Initialize the probability table and moneyline odds.
 
+        True is accepted as 1; False is rejected as zero.
+
         Args:
-            quality_team_a: Expected goals for the home team.
-            quality_team_b: Expected goals for the away team.
+            quality_team_a: Positive, finite expected goals for the home team.
+            quality_team_b: Positive, finite expected goals for the away team.
 
         Raises:
-            ValueError: If either quality is not a positive int or float.
+            ValueError: If either quality is not a positive, finite int or
+                float, or is an integer too large for the finiteness check.
 
         Warns:
             UserWarning: If the sum of team qualities is at least 10.
         """
-        if all(
-            isinstance(value, (float, int)) and value > 0
-            for value in (quality_team_a, quality_team_b)
-        ):
+        try:
+            valid_qualities = all(
+                isinstance(value, (float, int))
+                and value > 0
+                and math.isfinite(value)
+                for value in (quality_team_a, quality_team_b)
+            )
+        except OverflowError:
+            valid_qualities = False
+
+        if valid_qualities:
             if quality_team_a + quality_team_b >= 10:
                 warnings.warn(
                     "Values aren't real so it can't guarantee to work "
