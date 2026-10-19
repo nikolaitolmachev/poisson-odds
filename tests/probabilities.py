@@ -4,7 +4,7 @@ from poisson_odds.poisson import Poisson
 
 class TestPoissonProbabilities(unittest.TestCase):
     def setUp(self):
-        self.model = Poisson(quality_team_A=1.5, quality_team_B=0.7)
+        self.model = Poisson(quality_team_a=1.5, quality_team_b=0.7)
 
     def test_moneyline_odds(self):
         """
@@ -30,7 +30,7 @@ class TestPoissonProbabilities(unittest.TestCase):
         as the Total increases (... 2.5, 2.75, 3.00, 3.25 ...). Note: compares odds.
         """
 
-        totals = [value for key, value in self.model.calculate_total_odds_by_Poisson().items()]
+        totals = [value for key, value in self.model.calculate_total_odds_by_poisson().items()]
         over_odds = []
         under_odds = []
 
@@ -49,7 +49,7 @@ class TestPoissonProbabilities(unittest.TestCase):
         Special cases of comparison of handicap odds according to setUp.
         """
 
-        all_handicaps = self.model.calculate_handicap_odds_by_Poisson()
+        all_handicaps = self.model.calculate_handicap_odds_by_poisson()
         # It can be from -11.00 to +11.00 so just take some special cases
 
         # 1.5 is not greater than 0.7 so odds for handicap home must be much greater than away.

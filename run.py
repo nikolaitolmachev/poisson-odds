@@ -10,7 +10,7 @@ if __name__ == '__main__':
     # 1-X-2: 5.291-4.878-1.669
     print()
 
-    handicaps = test.calculate_handicap_odds_by_Poisson()
+    handicaps = test.calculate_handicap_odds_by_poisson()
     print('\n'.join([str(items) for key, items in handicaps.items()]))
     print()
     # ...
@@ -20,7 +20,7 @@ if __name__ == '__main__':
     # 1.5: 1.582 / 2.717
     # ...
 
-    totals = test.calculate_total_odds_by_Poisson()
+    totals = test.calculate_total_odds_by_poisson()
     print('\n'.join([str(items) for key, items in totals.items()]))
     # ...
     # Over/Under 2.75: 1.788 / 2.333
